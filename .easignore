@@ -1,0 +1,12 @@
+node_modules
+dist
+build
+.git
+.cache
+*.log
+android/app/build
+android/build
+android/.gradle
+vendapro.jks
+bun.lock
+bun.lockb

@@ -1,0 +1,32 @@
+{
+  "expo": {
+    "name": "JM Força de Vendas",
+    "slug": "jm-forca-de-vendas",
+    "version": "10.1.1",
+    "orientation": "portrait",
+    "icon": "./src/assets/images/jm_sistemas_logo_1788176773631.jpg",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#020617"
+    },
+    "android": {
+      "package": "br.com.jmsistemas.automac",
+      "versionCode": 11,
+      "adaptiveIcon": {
+        "backgroundColor": "#020617"
+      },
+      "permissions": [
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE",
+        "android.permission.CAMERA",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ca73bd6e-206e-44fc-a490-13b680ee6925"
+      }
+    }
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "appId": "com.jmsistemas.forcadevendas",
+  "appName": "Força de Vendas JM",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https",
+    "cleartext": true
+  },
+  "android": {
+    "versionCode": 1,
+    "versionName": "1.0.0",
+    "buildOptions": {
+      "releaseType": "AAB",
+      "keystorePath": "../vendapro.jks",
+      "keystoreAlias": "vendapro",
+      "signingType": "apksigner"
+    }
+  }
+}

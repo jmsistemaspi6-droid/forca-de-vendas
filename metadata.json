@@ -1,0 +1,12 @@
+{
+  "name": "Remix Força de Vendas",
+  "description": "Sistema integrado de Força de Vendas Mobile e Retaguarda ERP com Entrada de Mercadorias via XML NFe, Contas a Pagar, Contas a Receber com Baixas Parciais/Totais, Gestão de Estoque e Relatórios Gerenciais.",
+  "requestFramePermissions": [
+    "geolocation",
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
