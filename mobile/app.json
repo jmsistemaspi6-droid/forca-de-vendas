@@ -2,20 +2,16 @@
   "expo": {
     "name": "JM Força de Vendas",
     "slug": "jm-forca-de-vendas",
-    "version": "10.1.1",
+    "version": "17.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "splash": {
-      "backgroundColor": "#020617",
-      "resizeMode": "contain"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "br.com.jmsistemas.automac"
     },
     "android": {
       "package": "br.com.jmsistemas.automac",
-      "versionCode": 11,
+      "versionCode": 17,
       "adaptiveIcon": {
         "backgroundColor": "#020617"
       },
@@ -31,6 +27,18 @@
       "eas": {
         "projectId": "ca73bd6e-206e-44fc-a490-13b680ee6925"
       }
-    }
+    },
+    "plugins": [
+      "expo-asset",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "compileSdkVersion": 36,
+            "targetSdkVersion": 36
+          }
+        }
+      ]
+    ]
   }
 }

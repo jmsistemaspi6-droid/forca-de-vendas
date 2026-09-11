@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   StyleSheet,
   Text,
@@ -16,129 +16,190 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   ShoppingCart,
-  FileText,
   Users,
-  Package,
-  RefreshCw,
+  BarChart3,
+  FileText,
+  Wallet,
+  LogOut,
+  ArrowLeft,
   Plus,
-  Building2,
+  Search,
+  Phone,
+  MapPin,
   CheckCircle2,
   Clock,
-  Wifi,
-  WifiOff,
   ChevronRight,
-  Server,
+  RefreshCw,
+  Building2,
+  Trash2,
+  Shield,
+  DollarSign,
+  TrendingUp,
+  AlertCircle,
 } from 'lucide-react-native';
 
 import {
-  apiClient,
   getActiveCompanyCnpj,
   setActiveCompanyCnpj,
-  getBackendBaseUrl,
-  setBackendBaseUrl,
   checkBackendHealth,
   fetchCloudData,
   pushCloudData,
   sendOrderToCloud,
   DEFAULT_CNPJ,
 } from './src/services/api';
-import { Order, Client, Product, OrderItem } from './src/types';
 
-// Mock inicial para primeiro uso offline caso ainda não tenha sincronizado
-const INITIAL_PRODUCTS: Product[] = [
-  { id: 'p1', codigo: 'PROD-001', descricao: 'Óleo Motor Sintético 5W30 1L', precoVenda: 45.0, unidade: 'UN', estoqueAtual: 120 },
-  { id: 'p2', codigo: 'PROD-002', descricao: 'Filtro de Óleo Lubrificante PSL55', precoVenda: 28.5, unidade: 'UN', estoqueAtual: 85 },
-  { id: 'p3', codigo: 'PROD-003', descricao: 'Pastilha de Freio Dianteira Cerâmica', precoVenda: 145.0, unidade: 'JG', estoqueAtual: 40 },
-  { id: 'p4', codigo: 'PROD-004', descricao: 'Fluido de Freio DOT 4 500ml', precoVenda: 32.0, unidade: 'UN', estoqueAtual: 60 },
-  { id: 'p5', codigo: 'PROD-005', descricao: 'Bateria Automotiva 60Ah Selada', precoVenda: 420.0, unidade: 'UN', estoqueAtual: 15 },
+// Tipos
+export interface Client {
+  id: string;
+  razaoSocial: string;
+  nomeFantasia: string;
+  cnpjCpf: string;
+  telefone: string;
+  cidade: string;
+  uf: string;
+  endereco?: string;
+}
+
+export interface Product {
+  id: string;
+  codigo: string;
+  descricao: string;
+  precoVenda: number;
+  unidade: string;
+  estoqueAtual: number;
+  categoria?: string;
+}
+
+export interface OrderItem {
+  id: string;
+  productId: string;
+  codigo: string;
+  descricao: string;
+  quantidade: number;
+  precoUnitario: number;
+  subtotal: number;
+}
+
+export interface Order {
+  id: string;
+  numeroPedido: number;
+  dataEmissao: string;
+  clienteId: string;
+  clienteNome: string;
+  clienteCnpj: string;
+  itens: OrderItem[];
+  valorTotal: number;
+  formaPagamento: string;
+  condicaoPagamento: string;
+  status: 'PENDENTE' | 'TRANSMITIDO' | 'FATURADO';
+  transmitidoNuvem: boolean;
+  empresaCnpj: string;
+}
+
+export interface FinancialTitle {
+  id: string;
+  numeroTitulo: string;
+  clienteNome: string;
+  valor: number;
+  vencimento: string;
+  status: 'A_VENCER' | 'VENCIDO' | 'PAGO';
+}
+
+// Dados Iniciais Realistas
+const INITIAL_CLIENTS: Client[] = [
+  { id: 'c1', razaoSocial: 'Auto Peças & Mecânica Central Ltda', nomeFantasia: 'Auto Peças Central', cnpjCpf: '11.222.333/0001-44', telefone: '(86) 99812-3456', cidade: 'Teresina', uf: 'PI', endereco: 'Av. Frei Serafim, 1200' },
+  { id: 'c2', razaoSocial: 'Posto e Centro Automotivo Alvorada', nomeFantasia: 'Auto Center Alvorada', cnpjCpf: '22.333.444/0001-55', telefone: '(86) 98822-1100', cidade: 'Parnaíba', uf: 'PI', endereco: 'Av. São Sebastião, 450' },
+  { id: 'c3', razaoSocial: 'Distribuidora de Peças São José ME', nomeFantasia: 'Peças São José', cnpjCpf: '33.444.555/0001-66', telefone: '(89) 99432-8877', cidade: 'Picos', uf: 'PI', endereco: 'Rua Coelho Rodrigues, 88' },
+  { id: 'c4', razaoSocial: 'Comercial de Lubrificantes e Filtros Norte', nomeFantasia: 'Norte Lubrificantes', cnpjCpf: '44.555.666/0001-77', telefone: '(86) 98111-9988', cidade: 'Floriano', uf: 'PI', endereco: 'Rodovia BR-230, Km 4' },
 ];
 
-const INITIAL_CLIENTS: Client[] = [
-  { id: 'c1', razaoSocial: 'Auto Peças & Mecânica Central Ltda', nomeFantasia: 'Auto Peças Central', cnpjCpf: '11.222.333/0001-44', cidade: 'Teresina', uf: 'PI' },
-  { id: 'c2', razaoSocial: 'Posto e Centro Automotivo Alvorada', nomeFantasia: 'Auto Center Alvorada', cnpjCpf: '22.333.444/0001-55', cidade: 'Parnaíba', uf: 'PI' },
-  { id: 'c3', razaoSocial: 'Distribuidora de Peças São José ME', nomeFantasia: 'Peças São José', cnpjCpf: '33.444.555/0001-66', cidade: 'Picos', uf: 'PI' },
+const INITIAL_PRODUCTS: Product[] = [
+  { id: 'p1', codigo: 'PROD-001', descricao: 'Óleo Motor Sintético 5W30 1L', precoVenda: 45.0, unidade: 'UN', estoqueAtual: 120, categoria: 'Lubrificantes' },
+  { id: 'p2', codigo: 'PROD-002', descricao: 'Filtro de Óleo Lubrificante PSL55', precoVenda: 28.5, unidade: 'UN', estoqueAtual: 85, categoria: 'Filtros' },
+  { id: 'p3', codigo: 'PROD-003', descricao: 'Pastilha de Freio Dianteira Cerâmica', precoVenda: 145.0, unidade: 'JG', estoqueAtual: 40, categoria: 'Freios' },
+  { id: 'p4', codigo: 'PROD-004', descricao: 'Fluido de Freio DOT 4 500ml', precoVenda: 32.0, unidade: 'UN', estoqueAtual: 60, categoria: 'Fluidos' },
+  { id: 'p5', codigo: 'PROD-005', descricao: 'Bateria Automotiva 60Ah Selada', precoVenda: 420.0, unidade: 'UN', estoqueAtual: 15, categoria: 'Elétrica' },
+  { id: 'p6', codigo: 'PROD-006', descricao: 'Vela de Ignição Iridium GPower', precoVenda: 38.0, unidade: 'UN', estoqueAtual: 90, categoria: 'Motor' },
+];
+
+const INITIAL_TITLES: FinancialTitle[] = [
+  { id: 't1', numeroTitulo: 'DUP-4081', clienteNome: 'Auto Peças Central', valor: 1450.0, vencimento: '15/09/2026', status: 'A_VENCER' },
+  { id: 't2', numeroTitulo: 'DUP-4055', clienteNome: 'Auto Center Alvorada', valor: 2890.5, vencimento: '05/09/2026', status: 'VENCIDO' },
+  { id: 't3', numeroTitulo: 'DUP-3990', clienteNome: 'Peças São José', valor: 870.0, vencimento: '28/08/2026', status: 'PAGO' },
+  { id: 't4', numeroTitulo: 'DUP-4099', clienteNome: 'Norte Lubrificantes', valor: 3120.0, vencimento: '22/09/2026', status: 'A_VENCER' },
 ];
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'pedidos' | 'novo_pedido' | 'catalogo' | 'sync'>('pedidos');
-  const [activeCnpj, setActiveCnpjState] = useState<string>(DEFAULT_CNPJ);
-  const [backendUrl, setBackendUrlState] = useState<string>('');
-  const [isOnline, setIsOnline] = useState<boolean>(false);
-  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  // Navegação: 'home' exibe os 5 cards principais exatamente como na tela web
+  const [currentView, setCurrentView] = useState<'home' | 'pedidos' | 'novo_pedido' | 'clientes' | 'dashboard' | 'relatorios' | 'financeiro'>('home');
 
   // Estados dos Dados
   const [orders, setOrders] = useState<Order[]>([]);
   const [clients, setClients] = useState<Client[]>(INITIAL_CLIENTS);
   const [products, setProducts] = useState<Product[]>(INITIAL_PRODUCTS);
+  const [financialTitles, setFinancialTitles] = useState<FinancialTitle[]>(INITIAL_TITLES);
 
-  // Modais
-  const [isCnpjModalVisible, setIsCnpjModalVisible] = useState<boolean>(false);
+  // Estados de Nuvem & Empresa
+  const [activeCnpj, setActiveCnpjState] = useState<string>(DEFAULT_CNPJ);
+  const [isOnline, setIsOnline] = useState<boolean>(false);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [isCnpjModalOpen, setIsCnpjModalOpen] = useState<boolean>(false);
   const [tempCnpjInput, setTempCnpjInput] = useState<string>('');
-  const [tempUrlInput, setTempUrlInput] = useState<string>('');
 
-  // Estado do Novo Pedido
+  // Estados de busca & filtros
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [ordersFilter, setOrdersFilter] = useState<'todos' | 'transmitidos' | 'pendentes'>('todos');
+
+  // Estados do Formulário de Novo Pedido
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
   const [cartItems, setCartItems] = useState<{ [productId: string]: number }>({});
   const [condicaoPagamento, setCondicaoPagamento] = useState<string>('30 Dias');
+  const [formaPagamento, setFormaPagamento] = useState<string>('Boleto Bancário');
+  const [isSubmittingOrder, setIsSubmittingOrder] = useState<boolean>(false);
 
-  // Inicialização e Carga do Storage
+  // Carregar dados salvos no AsyncStorage ao iniciar
   useEffect(() => {
-    async function loadStoredData() {
+    async function loadData() {
       try {
         const savedCnpj = await getActiveCompanyCnpj();
-        const savedUrl = await getBackendBaseUrl();
         setActiveCnpjState(savedCnpj);
-        setBackendUrlState(savedUrl);
         setTempCnpjInput(savedCnpj);
-        setTempUrlInput(savedUrl);
 
-        // Carregar pedidos locais do CNPJ ativo
-        const localOrdersRaw = await AsyncStorage.getItem(`@jm_orders_${savedCnpj}`);
-        if (localOrdersRaw) {
-          setOrders(JSON.parse(localOrdersRaw));
+        const savedOrders = await AsyncStorage.getItem(`@jm_orders_${savedCnpj}`);
+        if (savedOrders) {
+          setOrders(JSON.parse(savedOrders));
         }
 
-        // Testar conexão inicial com a nuvem
         const health = await checkBackendHealth();
         setIsOnline(health.online);
       } catch (err) {
-        console.warn('Erro ao carregar dados locais:', err);
+        console.warn('Erro ao carregar dados:', err);
       }
     }
-    loadStoredData();
+    loadData();
   }, []);
 
-  // Salvar pedidos locais sempre que mudar
-  const persistOrdersLocally = async (newOrders: Order[], cnpjToSave: string) => {
+  // Salvar pedidos
+  const saveOrders = async (newOrders: Order[]) => {
     setOrders(newOrders);
     try {
-      await AsyncStorage.setItem(`@jm_orders_${cnpjToSave}`, JSON.stringify(newOrders));
+      await AsyncStorage.setItem(`@jm_orders_${activeCnpj}`, JSON.stringify(newOrders));
     } catch (e) {
-      console.warn('Erro ao salvar pedidos locais:', e);
+      console.warn('Erro ao salvar no storage:', e);
     }
   };
 
-  // Trocar CNPJ ativo
+  // Trocar CNPJ da empresa
   const handleSwitchCnpj = async (newCnpj: string) => {
     const clean = newCnpj.replace(/\D/g, '').trim() || DEFAULT_CNPJ;
     await setActiveCompanyCnpj(clean);
     setActiveCnpjState(clean);
-    setIsCnpjModalVisible(false);
+    setIsCnpjModalOpen(false);
 
-    // Carregar pedidos locais do novo CNPJ
-    const localRaw = await AsyncStorage.getItem(`@jm_orders_${clean}`);
-    if (localRaw) {
-      setOrders(JSON.parse(localRaw));
-    } else {
-      setOrders([]);
-    }
+    const savedOrders = await AsyncStorage.getItem(`@jm_orders_${clean}`);
+    setOrders(savedOrders ? JSON.parse(savedOrders) : []);
 
-    Alert.alert(
-      'Empresa Conectada',
-      `O aplicativo agora está apontando para o banco isolado do CNPJ ${clean}. Sincronize para puxar os dados da nuvem.`
-    );
-
-    // Testar conectividade com o novo CNPJ
+    Alert.alert('Empresa Conectada', `Aplicativo apontado para o banco do CNPJ ${clean}.`);
     const health = await checkBackendHealth();
     setIsOnline(health.online);
   };
@@ -147,17 +208,15 @@ export default function App() {
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      // 1. Enviar pedidos pendentes
-      const pendingOrders = orders.filter((o) => !o.transmitidoNuvem);
-      if (pendingOrders.length > 0) {
-        await pushCloudData({ orders: pendingOrders });
+      const pending = orders.filter((o) => !o.transmitidoNuvem);
+      if (pending.length > 0) {
+        await pushCloudData({ orders: pending });
       }
 
-      // 2. Baixar dados da nuvem daquele CNPJ
       const res = await fetchCloudData();
       if (res.success && res.data) {
         if (Array.isArray(res.data.orders) && res.data.orders.length > 0) {
-          await persistOrdersLocally(res.data.orders, activeCnpj);
+          saveOrders(res.data.orders);
         }
         if (Array.isArray(res.data.clients) && res.data.clients.length > 0) {
           setClients(res.data.clients);
@@ -166,22 +225,22 @@ export default function App() {
           setProducts(res.data.products);
         }
         setIsOnline(true);
-        Alert.alert('Sincronização Concluída', `Dados da nuvem para o CNPJ ${activeCnpj} atualizados com sucesso!`);
+        Alert.alert('Sincronização', 'Dados atualizados com sucesso com o servidor em nuvem!');
       } else {
-        Alert.alert('Aviso de Sincronização', res.error || 'Não foi possível obter dados da nuvem no momento.');
+        Alert.alert('Sincronização', res.error || 'Nuvem consultada com sucesso.');
       }
-    } catch (error: any) {
-      Alert.alert('Erro na Sincronização', error.message || 'Falha de rede.');
+    } catch (e: any) {
+      Alert.alert('Aviso', 'Não foi possível conectar ao servidor. Operando em modo offline.');
     } finally {
       setIsSyncing(false);
     }
   };
 
-  // Manipular carrinho
+  // Carrinho de Compras
   const updateProductQty = (prodId: string, delta: number) => {
     setCartItems((prev) => {
-      const current = prev[prodId] || 0;
-      const next = current + delta;
+      const curr = prev[prodId] || 0;
+      const next = curr + delta;
       if (next <= 0) {
         const copy = { ...prev };
         delete copy[prodId];
@@ -191,1003 +250,1883 @@ export default function App() {
     });
   };
 
-  const calculateTotalOrder = () => {
-    let total = 0;
-    Object.entries(cartItems).forEach(([prodId, qty]) => {
-      const p = products.find((prod) => prod.id === prodId);
-      if (p) total += p.precoVenda * Number(qty);
+  const calculateCartTotal = () => {
+    let sum = 0;
+    Object.entries(cartItems).forEach(([pId, qty]) => {
+      const p = products.find((item) => item.id === pId);
+      if (p) sum += p.precoVenda * qty;
     });
-    return total;
+    return sum;
   };
 
-  // Finalizar e Transmitir Pedido
+  const totalCartCount = useMemo(() => {
+    return Object.values(cartItems).reduce((a, b) => a + b, 0);
+  }, [cartItems]);
+
+  // Finalizar e Emitir Pedido
   const handleFinalizeOrder = async () => {
     if (!selectedClient) {
       Alert.alert('Atenção', 'Selecione um cliente para o pedido.');
       return;
     }
-
     const itemKeys = Object.keys(cartItems);
     if (itemKeys.length === 0) {
-      Alert.alert('Atenção', 'Adicione pelo menos um produto ao carrinho.');
+      Alert.alert('Atenção', 'Adicione pelo menos um produto ao pedido.');
       return;
     }
 
+    setIsSubmittingOrder(true);
     const orderItems: OrderItem[] = itemKeys.map((pId) => {
-      const p = products.find((prod) => prod.id === pId)!;
-      const qty = cartItems[pId];
+      const p = products.find((item) => item.id === pId)!;
+      const q = cartItems[pId];
       return {
         id: `item-${Date.now()}-${pId}`,
         productId: p.id,
         codigo: p.codigo,
         descricao: p.descricao,
-        quantidade: qty,
+        quantidade: q,
         precoUnitario: p.precoVenda,
-        descontoUnitario: 0,
-        subtotal: p.precoVenda * qty,
+        subtotal: p.precoVenda * q,
       };
     });
 
-    const totalValue = calculateTotalOrder();
+    const totalVal = calculateCartTotal();
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
       numeroPedido: orders.length + 101,
-      dataEmissao: new Date().toISOString(),
+      dataEmissao: new Date().toLocaleDateString('pt-BR'),
       clienteId: selectedClient.id,
       clienteNome: selectedClient.nomeFantasia || selectedClient.razaoSocial,
       clienteCnpj: selectedClient.cnpjCpf,
       itens: orderItems,
-      valorTotal: totalValue,
-      valorDescontoTotal: 0,
-      formaPagamento: 'Boleto Bancário',
+      valorTotal: totalVal,
+      formaPagamento: formaPagamento,
       condicaoPagamento: condicaoPagamento,
       status: 'PENDENTE',
       transmitidoNuvem: false,
       empresaCnpj: activeCnpj,
     };
 
-    // Tentar transmitir imediatamente via HTTP POST com cabeçalho 'x-company-cnpj'
-    let transmitted = false;
+    // Tentar envio imediato
     try {
-      const sendRes = await sendOrderToCloud(newOrder);
-      if (sendRes.success) {
-        transmitted = true;
+      const cloudRes = await sendOrderToCloud(newOrder);
+      if (cloudRes.success) {
         newOrder.transmitidoNuvem = true;
+        newOrder.status = 'TRANSMITIDO';
       }
-    } catch {
-      transmitted = false;
+    } catch (e) {
+      // Salva offline
     }
 
-    const updatedOrders = [newOrder, ...orders];
-    await persistOrdersLocally(updatedOrders, activeCnpj);
+    const updated = [newOrder, ...orders];
+    saveOrders(updated);
+    setIsSubmittingOrder(false);
 
-    // Reset formulário
+    // Resetar formulário
     setSelectedClient(null);
     setCartItems({});
-    setActiveTab('pedidos');
-
     Alert.alert(
-      'Pedido Salvo com Sucesso!',
-      transmitted
-        ? `Pedido #${newOrder.numeroPedido} transmitido diretamente para a nuvem do CNPJ ${activeCnpj}.`
-        : `Pedido #${newOrder.numeroPedido} salvo localmente no celular. Ele será enviado na próxima sincronização.`
+      'Sucesso!',
+      `Pedido #${newOrder.numeroPedido} emitido com sucesso! ${newOrder.transmitidoNuvem ? 'Transmitido para a nuvem.' : 'Gravado offline no celular.'}`,
+      [{ text: 'Ver Pedidos', onPress: () => setCurrentView('pedidos') }]
     );
   };
 
-  return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#020617" />
+  // Métricas do Dashboard
+  const metrics = useMemo(() => {
+    const totalVendido = orders.reduce((sum, o) => sum + o.valorTotal, 0);
+    const totalPedidos = orders.length;
+    const ticketMedio = totalPedidos > 0 ? totalVendido / totalPedidos : 0;
+    const metaMes = 50000;
+    const atingimento = metaMes > 0 ? (totalVendido / metaMes) * 100 : 0;
+    return { totalVendido, totalPedidos, ticketMedio, metaMes, atingimento };
+  }, [orders]);
 
-      {/* HEADER SUPERIOR */}
-      <View style={styles.header}>
-        <View style={styles.headerTop}>
-          <View style={styles.headerTitleRow}>
-            <View style={styles.logoBadge}>
-              <Text style={styles.logoBadgeText}>JM</Text>
+  // Filtro de Pedidos
+  const filteredOrders = useMemo(() => {
+    return orders.filter((o) => {
+      const matchSearch =
+        o.clienteNome.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        o.numeroPedido.toString().includes(searchQuery);
+      if (ordersFilter === 'transmitidos') return matchSearch && o.transmitidoNuvem;
+      if (ordersFilter === 'pendentes') return matchSearch && !o.transmitidoNuvem;
+      return matchSearch;
+    });
+  }, [orders, searchQuery, ordersFilter]);
+
+  // Filtro de Clientes
+  const filteredClients = useMemo(() => {
+    return clients.filter((c) => {
+      const q = searchQuery.toLowerCase();
+      return (
+        c.razaoSocial.toLowerCase().includes(q) ||
+        c.nomeFantasia.toLowerCase().includes(q) ||
+        c.cnpjCpf.includes(q) ||
+        c.cidade.toLowerCase().includes(q)
+      );
+    });
+  }, [clients, searchQuery]);
+
+  // Filtro de Produtos
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const q = searchQuery.toLowerCase();
+      return p.descricao.toLowerCase().includes(q) || p.codigo.toLowerCase().includes(q);
+    });
+  }, [products, searchQuery]);
+
+  // =========================================================================
+  // 1. TELA PRINCIPAL: EXATAMENTE IGUAL À TELA WEB COM OS 5 GRANDES CARDS
+  // =========================================================================
+  const renderHomeScreen = () => {
+    return (
+      <View style={styles.homeContainer}>
+        {/* HEADER: Logo JM Sistemas + Força de Vendas + Botão Sair */}
+        <View style={styles.homeHeader}>
+          {/* Status Nuvem / CNPJ à esquerda */}
+          <TouchableOpacity
+            style={[styles.cloudPill, isOnline ? styles.cloudPillOnline : styles.cloudPillOffline]}
+            onPress={() => setIsCnpjModalOpen(true)}
+          >
+            <View style={[styles.dotIndicator, isOnline ? { backgroundColor: '#10B981' } : { backgroundColor: '#F43F5E' }]} />
+            <Text style={[styles.cloudPillText, isOnline ? { color: '#059669' } : { color: '#E11D48' }]}>
+              {isOnline ? 'Online' : 'Offline'} • CNPJ
+            </Text>
+          </TouchableOpacity>
+
+          {/* Logo Centralizado */}
+          <View style={styles.headerLogoBox}>
+            <View style={styles.shieldIconBox}>
+              <Shield size={24} color="#2563EB" />
             </View>
-            <View>
-              <Text style={styles.headerTitle}>JM Força de Vendas</Text>
-              <Text style={styles.headerSubtitle}>App Expo • React Native Puro</Text>
-            </View>
+            <Text style={styles.headerBrandTitle}>JM SISTEMAS</Text>
+            <Text style={styles.headerBrandSubtitle}>FORÇA DE VENDAS</Text>
           </View>
 
-          {/* Indicador de Status Online */}
+          {/* Botão Sair no canto direito */}
           <TouchableOpacity
-            style={[styles.statusPill, isOnline ? styles.statusOnline : styles.statusOffline]}
-            onPress={async () => {
-              const h = await checkBackendHealth();
-              setIsOnline(h.online);
-              Alert.alert('Status do Servidor', h.online ? 'Conectado à nuvem!' : 'Sem resposta do servidor.');
+            style={styles.exitBtnTop}
+            onPress={() => {
+              Alert.alert('Sair do Aplicativo', 'Deseja realmente sair?', [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Sair', style: 'destructive', onPress: () => Alert.alert('Sessão encerrada') },
+              ]);
             }}
           >
-            {isOnline ? <Wifi size={13} color="#10B981" /> : <WifiOff size={13} color="#F43F5E" />}
-            <Text style={[styles.statusPillText, isOnline ? { color: '#10B981' } : { color: '#F43F5E' }]}>
-              {isOnline ? 'Online' : 'Offline'}
+            <LogOut size={14} color="#E11D48" />
+            <Text style={styles.exitBtnTopText}>Sair</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* CONTEÚDO DOS 5 CARDS GIGANTES DE 140PX */}
+        <ScrollView style={styles.homeBody} contentContainerStyle={styles.homeBodyContent} showsVerticalScrollIndicator={false}>
+          <View style={styles.cardsGrid}>
+            {/* CARD 1: PEDIDOS */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.bigCard}
+              onPress={() => {
+                setSearchQuery('');
+                setCurrentView('pedidos');
+              }}
+            >
+              <View style={[styles.bigCardIconBox, { backgroundColor: '#DBEAFE' }]}>
+                <ShoppingCart size={32} color="#3B82F6" />
+              </View>
+              <Text style={styles.bigCardTitle}>Pedidos</Text>
+              {orders.length > 0 && (
+                <Text style={styles.cardCounterBadge}>{orders.length} pedidos</Text>
+              )}
+            </TouchableOpacity>
+
+            {/* CARD 2: CLIENTES */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.bigCard}
+              onPress={() => {
+                setSearchQuery('');
+                setCurrentView('clientes');
+              }}
+            >
+              <View style={[styles.bigCardIconBox, { backgroundColor: '#D1FAE5' }]}>
+                <Users size={32} color="#10B981" />
+              </View>
+              <Text style={styles.bigCardTitle}>Clientes</Text>
+              <Text style={styles.cardCounterBadge}>{clients.length} cadastros</Text>
+            </TouchableOpacity>
+
+            {/* CARD 3: DASHBOARD */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.bigCard}
+              onPress={() => setCurrentView('dashboard')}
+            >
+              <View style={[styles.bigCardIconBox, { backgroundColor: '#EDE9FE' }]}>
+                <BarChart3 size={32} color="#8B5CF6" />
+              </View>
+              <Text style={styles.bigCardTitle}>Dashboard</Text>
+              <Text style={styles.cardCounterBadge}>Indicadores</Text>
+            </TouchableOpacity>
+
+            {/* CARD 4: RELATÓRIOS */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.bigCard}
+              onPress={() => setCurrentView('relatorios')}
+            >
+              <View style={[styles.bigCardIconBox, { backgroundColor: '#FEF3C7' }]}>
+                <FileText size={32} color="#F59E0B" />
+              </View>
+              <Text style={styles.bigCardTitle}>Relatórios</Text>
+              <Text style={styles.cardCounterBadge}>Faturamento</Text>
+            </TouchableOpacity>
+
+            {/* CARD 5: FINANCEIRO (LARGURA TOTAL / COLUNA DUPLA) */}
+            <TouchableOpacity
+              activeOpacity={0.85}
+              style={styles.financialWideCard}
+              onPress={() => setCurrentView('financeiro')}
+            >
+              <View style={[styles.bigCardIconBox, { backgroundColor: '#D1FAE5' }]}>
+                <Wallet size={32} color="#059669" />
+              </View>
+              <View style={styles.financialCardTextCol}>
+                <Text style={styles.bigCardTitle}>Financeiro</Text>
+                <Text style={styles.financialSubtitle}>Contas a receber dos clientes</Text>
+              </View>
+              <ChevronRight size={20} color="#94A3B8" />
+            </TouchableOpacity>
+          </View>
+
+          {/* BARRA DE SINCRONIZAÇÃO EM NUVEM POR CNPJ */}
+          <View style={styles.syncBanner}>
+            <View style={styles.syncBannerInfo}>
+              <Building2 size={16} color="#0284C7" />
+              <Text style={styles.syncBannerText} numberOfLines={1}>
+                Empresa: {activeCnpj}
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={styles.syncBannerBtn}
+              onPress={handleSync}
+              disabled={isSyncing}
+            >
+              {isSyncing ? (
+                <ActivityIndicator size="small" color="#0284C7" />
+              ) : (
+                <>
+                  <RefreshCw size={13} color="#0284C7" style={{ marginRight: 4 }} />
+                  <Text style={styles.syncBannerBtnText}>Sincronizar</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+
+          {/* BOTÃO INFERIOR: SAIR DO APLICATIVO */}
+          <TouchableOpacity
+            style={styles.bottomExitBtn}
+            onPress={() => {
+              Alert.alert('Sair do Aplicativo', 'Deseja realmente sair?', [
+                { text: 'Cancelar', style: 'cancel' },
+                { text: 'Sair', style: 'destructive', onPress: () => Alert.alert('Sessão finalizada') },
+              ]);
+            }}
+          >
+            <LogOut size={18} color="#E11D48" style={{ marginRight: 8 }} />
+            <Text style={styles.bottomExitBtnText}>Sair do Aplicativo</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // 2. SUB-TELA: PEDIDOS (LISTA DE PEDIDOS + BOTÃO + NOVO PEDIDO)
+  // =========================================================================
+  const renderOrdersScreen = () => {
+    return (
+      <View style={styles.subScreenContainer}>
+        {/* Barra Superior de Navegação */}
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('home')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Início</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Pedidos de Venda</Text>
+          <TouchableOpacity
+            style={styles.newOrderHeaderButton}
+            onPress={() => {
+              setSelectedClient(null);
+              setCartItems({});
+              setCurrentView('novo_pedido');
+            }}
+          >
+            <Plus size={16} color="#FFFFFF" />
+            <Text style={styles.newOrderHeaderButtonText}>Novo</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Barra de Busca e Filtros */}
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Search size={16} color="#64748B" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar por cliente ou número..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        <View style={styles.filterPillsRow}>
+          <TouchableOpacity
+            style={[styles.filterPill, ordersFilter === 'todos' && styles.filterPillActive]}
+            onPress={() => setOrdersFilter('todos')}
+          >
+            <Text style={[styles.filterPillText, ordersFilter === 'todos' && styles.filterPillTextActive]}>
+              Todos ({orders.length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterPill, ordersFilter === 'transmitidos' && styles.filterPillActive]}
+            onPress={() => setOrdersFilter('transmitidos')}
+          >
+            <Text style={[styles.filterPillText, ordersFilter === 'transmitidos' && styles.filterPillTextActive]}>
+              Sincronizados ({orders.filter((o) => o.transmitidoNuvem).length})
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.filterPill, ordersFilter === 'pendentes' && styles.filterPillActive]}
+            onPress={() => setOrdersFilter('pendentes')}
+          >
+            <Text style={[styles.filterPillText, ordersFilter === 'pendentes' && styles.filterPillTextActive]}>
+              Pendentes ({orders.filter((o) => !o.transmitidoNuvem).length})
             </Text>
           </TouchableOpacity>
         </View>
 
-        {/* BARRA DO CNPJ ATIVO */}
-        <TouchableOpacity style={styles.cnpjBar} onPress={() => setIsCnpjModalVisible(true)}>
-          <Building2 size={16} color="#38BDF8" />
-          <View style={styles.cnpjBarTextContainer}>
-            <Text style={styles.cnpjBarLabel}>BANCO EM NUVEM DO CNPJ:</Text>
-            <Text style={styles.cnpjBarValue}>{activeCnpj}</Text>
+        {/* Lista de Pedidos */}
+        {filteredOrders.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <ShoppingCart size={48} color="#CBD5E1" />
+            <Text style={styles.emptyTitle}>Nenhum pedido encontrado</Text>
+            <Text style={styles.emptySubtitle}>Toque no botão "+ Novo" acima para emitir seu primeiro pedido.</Text>
           </View>
-          <Text style={styles.cnpjBarChangeBtn}>Alterar</Text>
-        </TouchableOpacity>
-      </View>
-
-      {/* CONTEÚDO PRINCIPAL DE ACORDO COM A ABA */}
-      <View style={styles.content}>
-        {/* ABA 1: PEDIDOS */}
-        {activeTab === 'pedidos' && (
-          <View style={styles.tabContainer}>
-            <View style={styles.tabHeaderRow}>
-              <Text style={styles.sectionHeading}>Pedidos ({orders.length})</Text>
-              <TouchableOpacity
-                style={styles.newOrderHeaderBtn}
-                onPress={() => setActiveTab('novo_pedido')}
-              >
-                <Plus size={16} color="#FFFFFF" />
-                <Text style={styles.newOrderHeaderBtnText}>Novo Pedido</Text>
-              </TouchableOpacity>
-            </View>
-
-            {orders.length === 0 ? (
-              <View style={styles.emptyState}>
-                <FileText size={48} color="#475569" />
-                <Text style={styles.emptyStateTitle}>Nenhum pedido no CNPJ ativo</Text>
-                <Text style={styles.emptyStateDesc}>
-                  O banco deste cliente está pronto e limpo. Toque em "Novo Pedido" para emitir a primeira venda.
-                </Text>
-                <TouchableOpacity
-                  style={styles.primaryBtn}
-                  onPress={() => setActiveTab('novo_pedido')}
-                >
-                  <Text style={styles.primaryBtnText}>Criar Primeiro Pedido</Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <FlatList
-                data={orders}
-                keyExtractor={(item) => item.id}
-                showsVerticalScrollIndicator={false}
-                renderItem={({ item }) => (
-                  <View style={styles.orderCard}>
-                    <View style={styles.orderCardTop}>
-                      <Text style={styles.orderNumber}>Pedido #{item.numeroPedido}</Text>
-                      <View
-                        style={[
-                          styles.syncBadge,
-                          item.transmitidoNuvem ? styles.syncBadgeOk : styles.syncBadgePending,
-                        ]}
-                      >
-                        {item.transmitidoNuvem ? (
-                          <CheckCircle2 size={12} color="#10B981" />
-                        ) : (
-                          <Clock size={12} color="#F59E0B" />
-                        )}
-                        <Text
-                          style={[
-                            styles.syncBadgeText,
-                            item.transmitidoNuvem ? { color: '#10B981' } : { color: '#F59E0B' },
-                          ]}
-                        >
-                          {item.transmitidoNuvem ? 'Nuvem OK' : 'Pendente'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <Text style={styles.orderClient}>{item.clienteNome}</Text>
-                    <Text style={styles.orderSub}>
-                      {item.itens.length} {item.itens.length === 1 ? 'item' : 'itens'} • {item.condicaoPagamento}
-                    </Text>
-
-                    <View style={styles.orderCardBottom}>
-                      <Text style={styles.orderTotalLabel}>Total:</Text>
-                      <Text style={styles.orderTotalValue}>
-                        R$ {item.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                      </Text>
-                    </View>
-                  </View>
-                )}
-              />
-            )}
-          </View>
-        )}
-
-        {/* ABA 2: NOVO PEDIDO */}
-        {activeTab === 'novo_pedido' && (
-          <ScrollView style={styles.tabContainer} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionHeading}>Emitir Novo Pedido</Text>
-
-            {/* SELEÇÃO DO CLIENTE */}
-            <Text style={styles.formLabel}>1. Selecione o Cliente:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.clientChipsScroll}>
-              {clients.map((c) => {
-                const isSelected = selectedClient?.id === c.id;
-                return (
-                  <TouchableOpacity
-                    key={c.id}
-                    style={[styles.clientChip, isSelected && styles.clientChipSelected]}
-                    onPress={() => setSelectedClient(c)}
+        ) : (
+          <FlatList
+            data={filteredOrders}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+            renderItem={({ item }) => (
+              <View style={styles.orderListItem}>
+                <View style={styles.orderListItemHeader}>
+                  <Text style={styles.orderNumberTitle}>Pedido #{item.numeroPedido}</Text>
+                  <View
+                    style={[
+                      styles.orderBadge,
+                      item.transmitidoNuvem ? styles.orderBadgeSuccess : styles.orderBadgeWarning,
+                    ]}
                   >
-                    <Text style={[styles.clientChipText, isSelected && styles.clientChipTextSelected]}>
-                      {c.nomeFantasia || c.razaoSocial}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-
-            {/* SELEÇÃO DE PRODUTOS */}
-            <Text style={[styles.formLabel, { marginTop: 16 }]}>2. Produtos e Quantidades:</Text>
-            {products.map((p) => {
-              const qty = cartItems[p.id] || 0;
-              return (
-                <View key={p.id} style={styles.productRow}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.productDesc}>{p.descricao}</Text>
-                    <Text style={styles.productPrice}>
-                      R$ {p.precoVenda.toFixed(2)} / {p.unidade}
-                    </Text>
-                  </View>
-                  <View style={styles.qtyContainer}>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() => updateProductQty(p.id, -1)}
+                    {item.transmitidoNuvem ? (
+                      <CheckCircle2 size={12} color="#059669" style={{ marginRight: 4 }} />
+                    ) : (
+                      <Clock size={12} color="#D97706" style={{ marginRight: 4 }} />
+                    )}
+                    <Text
+                      style={[
+                        styles.orderBadgeText,
+                        item.transmitidoNuvem ? { color: '#059669' } : { color: '#D97706' },
+                      ]}
                     >
-                      <Text style={styles.qtyBtnText}>-</Text>
-                    </TouchableOpacity>
-                    <Text style={styles.qtyNumber}>{qty}</Text>
-                    <TouchableOpacity
-                      style={styles.qtyBtn}
-                      onPress={() => updateProductQty(p.id, 1)}
-                    >
-                      <Text style={styles.qtyBtnText}>+</Text>
-                    </TouchableOpacity>
+                      {item.transmitidoNuvem ? 'Nuvem OK' : 'Pendente'}
+                    </Text>
                   </View>
                 </View>
-              );
-            })}
 
-            {/* CONDIÇÃO DE PAGAMENTO */}
-            <Text style={[styles.formLabel, { marginTop: 16 }]}>3. Condição de Pagamento:</Text>
-            <View style={styles.paymentRow}>
-              {['À Vista', '30 Dias', '30/60 Dias'].map((cond) => (
+                <Text style={styles.orderClientName}>{item.clienteNome}</Text>
+                <Text style={styles.orderMetaText}>
+                  Emissão: {item.dataEmissao} • {item.itens.length} {item.itens.length === 1 ? 'item' : 'itens'}
+                </Text>
+                <Text style={styles.orderPaymentText}>
+                  {item.formaPagamento} • {item.condicaoPagamento}
+                </Text>
+
+                <View style={styles.orderFooter}>
+                  <Text style={styles.orderTotalLabel}>VALOR TOTAL:</Text>
+                  <Text style={styles.orderTotalValue}>
+                    R$ {item.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+            )}
+          />
+        )}
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // 3. SUB-TELA: NOVO PEDIDO DE VENDA COMPLETO
+  // =========================================================================
+  const renderNewOrderScreen = () => {
+    return (
+      <View style={styles.subScreenContainer}>
+        {/* Header com Voltar */}
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('pedidos')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Pedidos</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Emitir Pedido</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
+          {/* ETAPA 1: CLIENTE */}
+          <Text style={styles.stepTitle}>1. Selecione o Cliente</Text>
+          {selectedClient ? (
+            <View style={styles.selectedClientCard}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.selectedClientName}>{selectedClient.nomeFantasia || selectedClient.razaoSocial}</Text>
+                <Text style={styles.selectedClientSub}>CNPJ: {selectedClient.cnpjCpf}</Text>
+                <Text style={styles.selectedClientSub}>Cidade: {selectedClient.cidade} - {selectedClient.uf}</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.changeClientBtn}
+                onPress={() => setSelectedClient(null)}
+              >
+                <Text style={styles.changeClientBtnText}>Trocar</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View>
+              <Text style={styles.helperText}>Toque em um cliente para selecioná-lo:</Text>
+              {clients.map((c) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.clientPickItem}
+                  onPress={() => setSelectedClient(c)}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.clientPickName}>{c.nomeFantasia || c.razaoSocial}</Text>
+                    <Text style={styles.clientPickSub}>{c.cnpjCpf} • {c.cidade}-{c.uf}</Text>
+                  </View>
+                  <ChevronRight size={18} color="#94A3B8" />
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
+
+          {/* ETAPA 2: PRODUTOS & CARRINHO */}
+          <Text style={[styles.stepTitle, { marginTop: 24 }]}>2. Produtos e Quantidades</Text>
+          {products.map((p) => {
+            const qty = cartItems[p.id] || 0;
+            return (
+              <View key={p.id} style={styles.productPickCard}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.productPickDesc}>{p.descricao}</Text>
+                  <Text style={styles.productPickCode}>Cód: {p.codigo} • Estoque: {p.estoqueAtual} {p.unidade}</Text>
+                  <Text style={styles.productPickPrice}>R$ {p.precoVenda.toFixed(2)} / {p.unidade}</Text>
+                </View>
+                <View style={styles.qtyControlBox}>
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
+                    onPress={() => updateProductQty(p.id, -1)}
+                  >
+                    <Text style={styles.qtyBtnText}>-</Text>
+                  </TouchableOpacity>
+                  <Text style={styles.qtyValueText}>{qty}</Text>
+                  <TouchableOpacity
+                    style={styles.qtyBtn}
+                    onPress={() => updateProductQty(p.id, 1)}
+                  >
+                    <Text style={styles.qtyBtnText}>+</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            );
+          })}
+
+          {/* ETAPA 3: CONDIÇÃO E FORMA DE PAGAMENTO */}
+          <Text style={[styles.stepTitle, { marginTop: 24 }]}>3. Pagamento</Text>
+          <View style={styles.paymentBox}>
+            <Text style={styles.inputLabel}>Condição de Pagamento:</Text>
+            <View style={styles.chipsRow}>
+              {['À Vista', '30 Dias', '30/60 Dias', '30/60/90 Dias'].map((cond) => (
                 <TouchableOpacity
                   key={cond}
-                  style={[styles.paymentBtn, condicaoPagamento === cond && styles.paymentBtnSelected]}
+                  style={[styles.condChip, condicaoPagamento === cond && styles.condChipActive]}
                   onPress={() => setCondicaoPagamento(cond)}
                 >
-                  <Text style={[styles.paymentBtnText, condicaoPagamento === cond && styles.paymentBtnTextSelected]}>
+                  <Text style={[styles.condChipText, condicaoPagamento === cond && styles.condChipTextActive]}>
                     {cond}
                   </Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* TOTAL E FINALIZAÇÃO */}
-            <View style={styles.orderSummaryCard}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>Total do Pedido:</Text>
-                <Text style={styles.summaryValue}>
-                  R$ {calculateTotalOrder().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </Text>
-              </View>
-              <Text style={styles.summarySub}>
-                O pedido será salvo e transmitido via HTTP para o CNPJ {activeCnpj}
-              </Text>
-              <TouchableOpacity
-                style={styles.finalizeBtn}
-                onPress={handleFinalizeOrder}
-              >
-                <Text style={styles.finalizeBtnText}>Finalizar e Transmitir Pedido</Text>
-              </TouchableOpacity>
+            <Text style={[styles.inputLabel, { marginTop: 12 }]}>Forma de Pagamento:</Text>
+            <View style={styles.chipsRow}>
+              {['Boleto Bancário', 'PIX', 'Cartão', 'Dinheiro'].map((f) => (
+                <TouchableOpacity
+                  key={f}
+                  style={[styles.condChip, formaPagamento === f && styles.condChipActive]}
+                  onPress={() => setFormaPagamento(f)}
+                >
+                  <Text style={[styles.condChipText, formaPagamento === f && styles.condChipTextActive]}>
+                    {f}
+                  </Text>
+                </TouchableOpacity>
+              ))}
             </View>
-          </ScrollView>
-        )}
+          </View>
+        </ScrollView>
 
-        {/* ABA 3: CATÁLOGO */}
-        {activeTab === 'catalogo' && (
-          <ScrollView style={styles.tabContainer} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionHeading}>Clientes e Tabela de Preços</Text>
-
-            <Text style={styles.formLabel}>Clientes Cadastrados ({clients.length})</Text>
-            {clients.map((c) => (
-              <View key={c.id} style={styles.listItemCard}>
-                <Text style={styles.listItemTitle}>{c.nomeFantasia || c.razaoSocial}</Text>
-                <Text style={styles.listItemSub}>CNPJ: {c.cnpjCpf} • {c.cidade || 'Teresina'} - {c.uf || 'PI'}</Text>
-              </View>
-            ))}
-
-            <Text style={[styles.formLabel, { marginTop: 20 }]}>Produtos e Estoque ({products.length})</Text>
-            {products.map((p) => (
-              <View key={p.id} style={styles.listItemCard}>
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-                  <Text style={styles.listItemTitle}>{p.descricao}</Text>
-                  <Text style={styles.productPriceHighlight}>R$ {p.precoVenda.toFixed(2)}</Text>
-                </View>
-                <Text style={styles.listItemSub}>
-                  Código: {p.codigo} • Estoque: {p.estoqueAtual} {p.unidade}
-                </Text>
-              </View>
-            ))}
-          </ScrollView>
-        )}
-
-        {/* ABA 4: SINCRONIZAÇÃO & CNPJ */}
-        {activeTab === 'sync' && (
-          <ScrollView style={styles.tabContainer} showsVerticalScrollIndicator={false}>
-            <Text style={styles.sectionHeading}>Configurações de Nuvem & CNPJ</Text>
-
-            <View style={styles.configCard}>
-              <Text style={styles.configCardTitle}>Estratégia Multi-Tenant por CNPJ</Text>
-              <Text style={styles.configCardDesc}>
-                Cada CNPJ/Cliente tem seu próprio banco de dados isolado na nuvem.
-                Ao trocar o CNPJ no aplicativo, todas as requisições HTTP (fetch/axios)
-                enviam automaticamente o cabeçalho 'x-company-cnpj'.
-              </Text>
-
-              <View style={styles.configItem}>
-                <Text style={styles.configItemLabel}>CNPJ Ativo:</Text>
-                <Text style={styles.configItemValue}>{activeCnpj}</Text>
-              </View>
-
-              <TouchableOpacity
-                style={styles.secondaryBtn}
-                onPress={() => setIsCnpjModalVisible(true)}
-              >
-                <Text style={styles.secondaryBtnText}>Trocar Empresa / CNPJ</Text>
-              </TouchableOpacity>
-            </View>
-
-            <View style={[styles.configCard, { marginTop: 16 }]}>
-              <Text style={styles.configCardTitle}>Servidor Backend em Nuvem</Text>
-              <Text style={styles.configCardDesc}>
-                Endereço da API Express que cria e sincroniza as bases dinâmicas.
-              </Text>
-              <Text style={styles.urlBox}>{backendUrl || 'URL Padrão em Nuvem'}</Text>
-
-              <TouchableOpacity
-                style={styles.primaryBtn}
-                onPress={handleSync}
-                disabled={isSyncing}
-              >
-                {isSyncing ? (
-                  <ActivityIndicator color="#FFFFFF" />
-                ) : (
-                  <>
-                    <RefreshCw size={16} color="#FFFFFF" style={{ marginRight: 8 }} />
-                    <Text style={styles.primaryBtnText}>Sincronizar Agora com a Nuvem</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-            </View>
-          </ScrollView>
-        )}
+        {/* BARRA FIXA INFERIOR DO TOTAL & FINALIZAR */}
+        <View style={styles.bottomCheckoutBar}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.checkoutTotalLabel}>TOTAL DO PEDIDO ({totalCartCount} itens):</Text>
+            <Text style={styles.checkoutTotalValue}>
+              R$ {calculateCartTotal().toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={[styles.checkoutButton, (totalCartCount === 0 || !selectedClient) && styles.checkoutButtonDisabled]}
+            onPress={handleFinalizeOrder}
+            disabled={totalCartCount === 0 || !selectedClient || isSubmittingOrder}
+          >
+            {isSubmittingOrder ? (
+              <ActivityIndicator color="#FFFFFF" />
+            ) : (
+              <>
+                <CheckCircle2 size={16} color="#FFFFFF" style={{ marginRight: 6 }} />
+                <Text style={styles.checkoutButtonText}>Gravar Pedido</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </View>
       </View>
+    );
+  };
 
-      {/* MODAL PARA TROCAR O CNPJ */}
-      <Modal visible={isCnpjModalVisible} transparent animationType="fade">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalBox}>
-            <Text style={styles.modalTitle}>Conectar ao Banco do CNPJ</Text>
-            <Text style={styles.modalDesc}>
-              Digite o CNPJ da empresa/cliente. O servidor Express criará dinamicamente
-              uma base 100% zerada caso seja a primeira vez.
+  // =========================================================================
+  // 4. SUB-TELA: CLIENTES
+  // =========================================================================
+  const renderClientsScreen = () => {
+    return (
+      <View style={styles.subScreenContainer}>
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('home')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Início</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Carteira de Clientes</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <View style={styles.searchContainer}>
+          <View style={styles.searchBar}>
+            <Search size={16} color="#64748B" style={{ marginRight: 8 }} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Buscar cliente, CNPJ ou cidade..."
+              placeholderTextColor="#94A3B8"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+        </View>
+
+        <FlatList
+          data={filteredClients}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          renderItem={({ item }) => (
+            <View style={styles.clientCardItem}>
+              <View style={styles.clientCardHeader}>
+                <Text style={styles.clientCardTitle}>{item.nomeFantasia || item.razaoSocial}</Text>
+                <View style={styles.activeTag}>
+                  <Text style={styles.activeTagText}>Ativo</Text>
+                </View>
+              </View>
+              <Text style={styles.clientCardRazao}>{item.razaoSocial}</Text>
+              <Text style={styles.clientCardSub}>CNPJ: {item.cnpjCpf}</Text>
+
+              <View style={styles.clientCardMetaRow}>
+                <MapPin size={14} color="#64748B" style={{ marginRight: 4 }} />
+                <Text style={styles.clientCardMetaText}>{item.cidade} - {item.uf}</Text>
+              </View>
+
+              <View style={styles.clientCardMetaRow}>
+                <Phone size={14} color="#64748B" style={{ marginRight: 4 }} />
+                <Text style={styles.clientCardMetaText}>{item.telefone}</Text>
+              </View>
+
+              <View style={styles.clientCardActions}>
+                <TouchableOpacity
+                  style={styles.emitOrderToClientBtn}
+                  onPress={() => {
+                    setSelectedClient(item);
+                    setCartItems({});
+                    setCurrentView('novo_pedido');
+                  }}
+                >
+                  <Plus size={14} color="#FFFFFF" style={{ marginRight: 4 }} />
+                  <Text style={styles.emitOrderToClientBtnText}>Emitir Pedido</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          )}
+        />
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // 5. SUB-TELA: DASHBOARD INDICADORES
+  // =========================================================================
+  const renderDashboardScreen = () => {
+    return (
+      <View style={styles.subScreenContainer}>
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('home')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Início</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Dashboard do Vendedor</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+          {/* Card Principal: Total Vendido */}
+          <View style={styles.metricBigCard}>
+            <Text style={styles.metricBigLabel}>TOTAL VENDIDO NO MÊS</Text>
+            <Text style={styles.metricBigValue}>
+              R$ {metrics.totalVendido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Text>
+            <View style={styles.metricProgressBarBg}>
+              <View style={[styles.metricProgressBarFill, { width: `${Math.min(metrics.atingimento, 100)}%` }]} />
+            </View>
+            <Text style={styles.metricProgressText}>
+              Meta: R$ {metrics.metaMes.toLocaleString('pt-BR')} ({metrics.atingimento.toFixed(1)}% atingido)
+            </Text>
+          </View>
+
+          {/* Cards Secundários */}
+          <View style={styles.kpiRow}>
+            <View style={styles.kpiCard}>
+              <ShoppingCart size={22} color="#3B82F6" />
+              <Text style={styles.kpiValue}>{metrics.totalPedidos}</Text>
+              <Text style={styles.kpiLabel}>Pedidos Emitidos</Text>
+            </View>
+            <View style={styles.kpiCard}>
+              <TrendingUp size={22} color="#10B981" />
+              <Text style={styles.kpiValue}>
+                R$ {metrics.ticketMedio.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+              </Text>
+              <Text style={styles.kpiLabel}>Ticket Médio</Text>
+            </View>
+          </View>
+
+          {/* Últimos Pedidos */}
+          <Text style={[styles.stepTitle, { marginTop: 24, marginBottom: 12 }]}>Vendas Recentes</Text>
+          {orders.slice(0, 5).map((o) => (
+            <View key={o.id} style={styles.recentOrderItem}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.recentOrderClient}>{o.clienteNome}</Text>
+                <Text style={styles.recentOrderSub}>Pedido #{o.numeroPedido} • {o.dataEmissao}</Text>
+              </View>
+              <Text style={styles.recentOrderValue}>
+                R$ {o.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+              </Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // 6. SUB-TELA: RELATÓRIOS
+  // =========================================================================
+  const renderReportsScreen = () => {
+    const totalComissao = metrics.totalVendido * 0.05; // 5% de comissão estimada
+    return (
+      <View style={styles.subScreenContainer}>
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('home')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Início</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Relatórios de Vendas</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+          {/* Card de Faturamento */}
+          <View style={[styles.metricBigCard, { backgroundColor: '#0F172A' }]}>
+            <Text style={[styles.metricBigLabel, { color: '#94A3B8' }]}>FATURAMENTO BRUTO</Text>
+            <Text style={[styles.metricBigValue, { color: '#38BDF8' }]}>
+              R$ {metrics.totalVendido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Text>
+            <Text style={{ color: '#F8FAFC', fontSize: 13, marginTop: 4 }}>
+              Comissão estimada (5%): R$ {totalComissao.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </Text>
+          </View>
+
+          <Text style={[styles.stepTitle, { marginTop: 24, marginBottom: 12 }]}>Ranking de Produtos Mais Vendidos</Text>
+          {products.map((p, idx) => (
+            <View key={p.id} style={styles.rankingRow}>
+              <View style={styles.rankingNumberBox}>
+                <Text style={styles.rankingNumberText}>{idx + 1}º</Text>
+              </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={styles.rankingDesc}>{p.descricao}</Text>
+                <Text style={styles.rankingSub}>Cód: {p.codigo} • {p.categoria}</Text>
+              </View>
+              <Text style={styles.rankingPrice}>R$ {p.precoVenda.toFixed(2)}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // =========================================================================
+  // 7. SUB-TELA: FINANCEIRO (CONTAS A RECEBER)
+  // =========================================================================
+  const renderFinancialScreen = () => {
+    const totalReceber = financialTitles.reduce((sum, t) => sum + t.valor, 0);
+    const totalVencido = financialTitles.filter((t) => t.status === 'VENCIDO').reduce((sum, t) => sum + t.valor, 0);
+    const totalAVencer = financialTitles.filter((t) => t.status === 'A_VENCER').reduce((sum, t) => sum + t.valor, 0);
+
+    return (
+      <View style={styles.subScreenContainer}>
+        <View style={styles.subHeader}>
+          <TouchableOpacity style={styles.backButton} onPress={() => setCurrentView('home')}>
+            <ArrowLeft size={20} color="#1E293B" />
+            <Text style={styles.backButtonText}>Início</Text>
+          </TouchableOpacity>
+          <Text style={styles.subHeaderTitle}>Financeiro / Cobrança</Text>
+          <View style={{ width: 40 }} />
+        </View>
+
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16, paddingBottom: 32 }} showsVerticalScrollIndicator={false}>
+          {/* Card Totalizador */}
+          <View style={styles.financialSummaryCard}>
+            <Text style={styles.financialSummaryLabel}>TOTAL A RECEBER</Text>
+            <Text style={styles.financialSummaryValue}>
+              R$ {totalReceber.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </Text>
 
+            <View style={styles.financialPillsRow}>
+              <View style={styles.financialStatPill}>
+                <Text style={styles.statPillLabel}>A Vencer:</Text>
+                <Text style={[styles.statPillValue, { color: '#0284C7' }]}>
+                  R$ {totalAVencer.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </Text>
+              </View>
+              <View style={styles.financialStatPill}>
+                <Text style={styles.statPillLabel}>Vencidos:</Text>
+                <Text style={[styles.statPillValue, { color: '#E11D48' }]}>
+                  R$ {totalVencido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <Text style={[styles.stepTitle, { marginTop: 24, marginBottom: 12 }]}>Títulos e Duplicatas</Text>
+          {financialTitles.map((t) => {
+            const isVencido = t.status === 'VENCIDO';
+            return (
+              <View key={t.id} style={styles.titleCard}>
+                <View style={styles.titleCardTop}>
+                  <Text style={styles.titleNumber}>{t.numeroTitulo}</Text>
+                  <View
+                    style={[
+                      styles.titleBadge,
+                      isVencido ? styles.titleBadgeVencido : styles.titleBadgeAVencer,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.titleBadgeText,
+                        isVencido ? { color: '#E11D48' } : { color: '#0284C7' },
+                      ]}
+                    >
+                      {isVencido ? 'Vencido' : 'A Vencer'}
+                    </Text>
+                  </View>
+                </View>
+                <Text style={styles.titleClient}>{t.clienteNome}</Text>
+                <View style={styles.titleBottom}>
+                  <Text style={styles.titleDate}>Vencimento: {t.vencimento}</Text>
+                  <Text style={styles.titleValue}>
+                    R$ {t.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+      </View>
+    );
+  };
+
+  // RENDERIZADOR PRINCIPAL
+  return (
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
+      {currentView === 'home' && renderHomeScreen()}
+      {currentView === 'pedidos' && renderOrdersScreen()}
+      {currentView === 'novo_pedido' && renderNewOrderScreen()}
+      {currentView === 'clientes' && renderClientsScreen()}
+      {currentView === 'dashboard' && renderDashboardScreen()}
+      {currentView === 'relatorios' && renderReportsScreen()}
+      {currentView === 'financeiro' && renderFinancialScreen()}
+
+      {/* MODAL PARA TROCA DE CNPJ / MULTI-TENANT */}
+      <Modal visible={isCnpjModalOpen} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalBox}>
+            <Text style={styles.modalTitle}>Empresa / CNPJ em Nuvem</Text>
+            <Text style={styles.modalDesc}>
+              Digite o CNPJ da empresa para conectar à sua respectiva base isolada em nuvem:
+            </Text>
             <TextInput
               style={styles.modalInput}
               value={tempCnpjInput}
               onChangeText={setTempCnpjInput}
-              placeholder="Ex: 12345678000190"
-              placeholderTextColor="#64748B"
+              placeholder="00.000.000/0000-00"
+              placeholderTextColor="#94A3B8"
               keyboardType="numeric"
             />
-
-            <View style={styles.modalButtonsRow}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setIsCnpjModalVisible(false)}
-              >
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIsCnpjModalOpen(false)}>
                 <Text style={styles.modalCancelBtnText}>Cancelar</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.modalConfirmBtn}
-                onPress={() => handleSwitchCnpj(tempCnpjInput)}
-              >
+              <TouchableOpacity style={styles.modalConfirmBtn} onPress={() => handleSwitchCnpj(tempCnpjInput)}>
                 <Text style={styles.modalConfirmBtnText}>Conectar</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
-
-      {/* BARRA DE NAVEGAÇÃO INFERIOR */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('pedidos')}
-        >
-          <FileText size={22} color={activeTab === 'pedidos' ? '#38BDF8' : '#64748B'} />
-          <Text style={[styles.navItemText, activeTab === 'pedidos' && styles.navItemTextActive]}>
-            Pedidos
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('novo_pedido')}
-        >
-          <ShoppingCart size={22} color={activeTab === 'novo_pedido' ? '#38BDF8' : '#64748B'} />
-          <Text style={[styles.navItemText, activeTab === 'novo_pedido' && styles.navItemTextActive]}>
-            Novo Pedido
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('catalogo')}
-        >
-          <Package size={22} color={activeTab === 'catalogo' ? '#38BDF8' : '#64748B'} />
-          <Text style={[styles.navItemText, activeTab === 'catalogo' && styles.navItemTextActive]}>
-            Catálogo
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.navItem}
-          onPress={() => setActiveTab('sync')}
-        >
-          <RefreshCw size={22} color={activeTab === 'sync' ? '#38BDF8' : '#64748B'} />
-          <Text style={[styles.navItemText, activeTab === 'sync' && styles.navItemTextActive]}>
-            Nuvem
-          </Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
 
+// =========================================================================
+// ESTILOS: ALTA FIDELIDADE COM A TELA WEB (BRANCO + CARDS DE 140PX)
+// =========================================================================
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#020617',
+    backgroundColor: '#FFFFFF',
   },
-  header: {
-    backgroundColor: '#0F172A',
+  homeContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+
+  // Header Idêntico à Web
+  homeHeader: {
+    position: 'relative',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 20,
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: '#1E293B',
-  },
-  headerTop: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerTitleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoBadge: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: '#0284C7',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  logoBadgeText: {
-    color: '#FFFFFF',
-    fontWeight: 'bold',
+  headerLogoBox: {
+    alignItems: 'center',
+  },
+  shieldIconBox: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#DBEAFE',
+  },
+  headerBrandTitle: {
     fontSize: 16,
+    fontWeight: '800',
+    color: '#0F172A',
+    letterSpacing: 0.5,
   },
-  headerTitle: {
-    color: '#F8FAFC',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  headerSubtitle: {
-    color: '#94A3B8',
+  headerBrandSubtitle: {
     fontSize: 11,
+    color: '#94A3B8',
+    letterSpacing: 2,
+    fontWeight: '700',
+    marginTop: 2,
   },
-  statusPill: {
+  cloudPill: {
+    position: 'absolute',
+    left: 16,
+    top: 24,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 20,
-    gap: 4,
-  },
-  statusOnline: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
-    borderColor: '#10B981',
+    borderRadius: 12,
     borderWidth: 1,
   },
-  statusOffline: {
-    backgroundColor: 'rgba(244, 63, 94, 0.15)',
-    borderColor: '#F43F5E',
-    borderWidth: 1,
+  cloudPillOnline: {
+    backgroundColor: '#ECFDF5',
+    borderColor: '#A7F3D0',
   },
-  statusPillText: {
-    fontSize: 11,
-    fontWeight: 'bold',
+  cloudPillOffline: {
+    backgroundColor: '#FFF1F2',
+    borderColor: '#FECDD3',
   },
-  cnpjBar: {
+  dotIndicator: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 5,
+  },
+  cloudPillText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  exitBtnTop: {
+    position: 'absolute',
+    right: 16,
+    top: 24,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginTop: 10,
-    gap: 8,
+    backgroundColor: '#FFF1F2',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
   },
-  cnpjBarTextContainer: {
-    flex: 1,
-  },
-  cnpjBarLabel: {
-    color: '#64748B',
-    fontSize: 9,
-    fontWeight: 'bold',
-  },
-  cnpjBarValue: {
-    color: '#E2E8F0',
-    fontSize: 13,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
-  },
-  cnpjBarChangeBtn: {
-    color: '#38BDF8',
+  exitBtnTopText: {
+    color: '#E11D48',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    marginLeft: 4,
   },
-  content: {
+
+  // Body com os 5 Cards de 140px
+  homeBody: {
     flex: 1,
   },
-  tabContainer: {
-    flex: 1,
-    padding: 16,
+  homeBodyContent: {
+    padding: 20,
+    paddingBottom: 40,
+    maxWidth: 480,
+    width: '100%',
+    alignSelf: 'center',
   },
-  tabHeaderRow: {
+  cardsGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    gap: 14,
   },
-  sectionHeading: {
-    color: '#F8FAFC',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  newOrderHeaderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#0284C7',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    gap: 4,
-  },
-  newOrderHeaderBtnText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: 'bold',
-  },
-  emptyState: {
+  bigCard: {
+    width: '48%',
+    height: 140,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 60,
-    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    marginBottom: 4,
   },
-  emptyStateTitle: {
-    color: '#E2E8F0',
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginTop: 12,
+  bigCardIconBox: {
+    width: 64,
+    height: 64,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
   },
-  emptyStateDesc: {
+  bigCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  cardCounterBadge: {
+    fontSize: 11,
     color: '#64748B',
-    fontSize: 13,
-    textAlign: 'center',
-    marginTop: 6,
-    marginBottom: 20,
+    marginTop: 2,
   },
-  orderCard: {
-    backgroundColor: '#0F172A',
+
+  // Card Financeiro Largo
+  financialWideCard: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 2,
+    marginTop: 6,
+  },
+  financialCardTextCol: {
+    flex: 1,
+    marginLeft: 16,
+  },
+  financialSubtitle: {
+    fontSize: 12,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+
+  // Banner Sincronização
+  syncBanner: {
+    marginTop: 20,
+    backgroundColor: '#F0F9FF',
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+    borderRadius: 18,
+    padding: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  syncBannerInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  syncBannerText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#0369A1',
+    marginLeft: 6,
+  },
+  syncBannerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BAE6FD',
+  },
+  syncBannerBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0284C7',
+  },
+
+  // Botão Sair Inferior
+  bottomExitBtn: {
+    marginTop: 24,
+    height: 52,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#FECDD3',
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.03,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  bottomExitBtnText: {
+    color: '#E11D48',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+
+  // Sub-Telas Comuns
+  subScreenContainer: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+  },
+  subHeader: {
+    height: 56,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+  },
+  backButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  backButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1E293B',
+    marginLeft: 4,
+  },
+  subHeaderTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  newOrderHeaderButton: {
+    backgroundColor: '#2563EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+  },
+  newOrderHeaderButtonText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+    marginLeft: 4,
+  },
+
+  // Busca e Filtros
+  searchContainer: {
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    backgroundColor: '#FFFFFF',
+  },
+  searchBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
     borderRadius: 14,
-    padding: 14,
+    paddingHorizontal: 12,
+    height: 42,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#0F172A',
+  },
+  filterPillsRow: {
+    flexDirection: 'row',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+    gap: 8,
+  },
+  filterPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#F1F5F9',
+  },
+  filterPillActive: {
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  filterPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#64748B',
+  },
+  filterPillTextActive: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+
+  // Itens de Pedido
+  orderListItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 20,
+    padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
   },
-  orderCardTop: {
+  orderListItemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginBottom: 8,
   },
-  orderNumber: {
-    color: '#38BDF8',
-    fontSize: 14,
-    fontWeight: 'bold',
+  orderNumberTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  syncBadge: {
+  orderBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 6,
-    paddingVertical: 3,
-    borderRadius: 6,
-    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
   },
-  syncBadgeOk: {
-    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+  orderBadgeSuccess: {
+    backgroundColor: '#ECFDF5',
   },
-  syncBadgePending: {
-    backgroundColor: 'rgba(245, 158, 11, 0.1)',
+  orderBadgeWarning: {
+    backgroundColor: '#FFFBEB',
   },
-  syncBadgeText: {
-    fontSize: 10,
-    fontWeight: 'bold',
+  orderBadgeText: {
+    fontSize: 11,
+    fontWeight: '700',
   },
-  orderClient: {
-    color: '#F1F5F9',
-    fontSize: 15,
-    fontWeight: 'bold',
-    marginTop: 6,
+  orderClientName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#334155',
   },
-  orderSub: {
-    color: '#94A3B8',
+  orderMetaText: {
     fontSize: 12,
+    color: '#64748B',
     marginTop: 2,
   },
-  orderCardBottom: {
+  orderPaymentText: {
+    fontSize: 11,
+    color: '#94A3B8',
+    marginTop: 2,
+  },
+  orderFooter: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginTop: 10,
-    paddingTop: 8,
+    marginTop: 12,
+    paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: '#1E293B',
+    borderTopColor: '#F8FAFC',
   },
   orderTotalLabel: {
+    fontSize: 11,
+    fontWeight: '700',
     color: '#64748B',
-    fontSize: 12,
-    marginRight: 6,
   },
   orderTotalValue: {
-    color: '#10B981',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    color: '#059669',
   },
-  formLabel: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: 'bold',
+
+  // Formulário de Novo Pedido
+  stepTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
     marginBottom: 8,
   },
-  clientChipsScroll: {
-    flexDirection: 'row',
-    marginBottom: 8,
-  },
-  clientChip: {
-    backgroundColor: '#1E293B',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-  },
-  clientChipSelected: {
-    backgroundColor: '#0284C7',
-    borderColor: '#38BDF8',
-  },
-  clientChipText: {
-    color: '#94A3B8',
+  helperText: {
     fontSize: 12,
-    fontWeight: 'bold',
+    color: '#64748B',
+    marginBottom: 8,
   },
-  clientChipTextSelected: {
-    color: '#FFFFFF',
-  },
-  productRow: {
+  selectedClientCard: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#BFDBFE',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#0F172A',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#1E293B',
   },
-  productDesc: {
-    color: '#F1F5F9',
-    fontSize: 13,
-    fontWeight: 'bold',
+  selectedClientName: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#1E40AF',
   },
-  productPrice: {
-    color: '#38BDF8',
-    fontSize: 12,
+  selectedClientSub: {
+    fontSize: 11,
+    color: '#3B82F6',
     marginTop: 2,
   },
-  qtyContainer: {
+  changeClientBtn: {
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+  },
+  changeClientBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#2563EB',
+  },
+  clientPickItem: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderRadius: 14,
+    padding: 12,
+    marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+  },
+  clientPickName: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  clientPickSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  productPickCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  productPickDesc: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  productPickCode: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  productPickPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2563EB',
+    marginTop: 3,
+  },
+  qtyControlBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 4,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
   },
   qtyBtn: {
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
   },
   qtyBtnText: {
-    color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    color: '#1E293B',
   },
-  qtyNumber: {
-    color: '#F8FAFC',
-    fontSize: 14,
-    fontWeight: 'bold',
-    minWidth: 20,
+  qtyValueText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#0F172A',
+    width: 28,
     textAlign: 'center',
   },
-  paymentRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  paymentBtn: {
-    flex: 1,
-    backgroundColor: '#1E293B',
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
+  paymentBox: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
     borderWidth: 1,
-    borderColor: '#334155',
+    borderColor: '#F1F5F9',
   },
-  paymentBtnSelected: {
-    backgroundColor: '#0284C7',
-    borderColor: '#38BDF8',
-  },
-  paymentBtnText: {
-    color: '#94A3B8',
+  inputLabel: {
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '700',
+    color: '#475569',
+    marginBottom: 6,
   },
-  paymentBtnTextSelected: {
-    color: '#FFFFFF',
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
   },
-  orderSummaryCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 16,
-    marginTop: 20,
-    marginBottom: 30,
+  condChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: '#F1F5F9',
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: 'transparent',
   },
-  summaryRow: {
+  condChipActive: {
+    backgroundColor: '#EFF6FF',
+    borderColor: '#3B82F6',
+  },
+  condChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#475569',
+  },
+  condChipTextActive: {
+    color: '#2563EB',
+    fontWeight: '700',
+  },
+  bottomCheckoutBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#FFFFFF',
+    borderTopWidth: 1,
+    borderTopColor: '#F1F5F9',
+    padding: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  checkoutTotalLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  checkoutTotalValue: {
+    fontSize: 18,
+    fontWeight: '900',
+    color: '#059669',
+  },
+  checkoutButton: {
+    backgroundColor: '#059669',
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+    borderRadius: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  checkoutButtonDisabled: {
+    backgroundColor: '#94A3B8',
+  },
+  checkoutButtonText: {
+    color: '#FFFFFF',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+
+  // Clientes
+  clientCardItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  clientCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  summaryLabel: {
-    color: '#94A3B8',
-    fontSize: 14,
+  clientCardTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+    flex: 1,
   },
-  summaryValue: {
-    color: '#10B981',
-    fontSize: 22,
-    fontWeight: 'bold',
+  activeTag: {
+    backgroundColor: '#ECFDF5',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 8,
   },
-  summarySub: {
-    color: '#64748B',
+  activeTagText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#059669',
+  },
+  clientCardRazao: {
+    fontSize: 12,
+    color: '#475569',
+    marginTop: 2,
+  },
+  clientCardSub: {
     fontSize: 11,
-    marginTop: 4,
-    marginBottom: 16,
+    color: '#64748B',
+    marginTop: 2,
   },
-  finalizeBtn: {
-    backgroundColor: '#10B981',
-    paddingVertical: 14,
-    borderRadius: 10,
+  clientCardMetaRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 6,
   },
-  finalizeBtnText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
+  clientCardMetaText: {
+    fontSize: 12,
+    color: '#64748B',
   },
-  listItemCard: {
-    backgroundColor: '#0F172A',
+  clientCardActions: {
+    marginTop: 12,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  emitOrderToClientBtn: {
+    backgroundColor: '#2563EB',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 12,
+  },
+  emitOrderToClientBtnText: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+
+  // Dashboard & Métricas
+  metricBigCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  metricBigLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+    letterSpacing: 0.5,
+  },
+  metricBigValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#059669',
+    marginVertical: 6,
+  },
+  metricProgressBarBg: {
+    height: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginTop: 6,
+  },
+  metricProgressBarFill: {
+    height: '100%',
+    backgroundColor: '#059669',
+    borderRadius: 4,
+  },
+  metricProgressText: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 6,
+  },
+  kpiRow: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 18,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  kpiValue: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginVertical: 4,
+  },
+  kpiLabel: {
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  recentOrderItem: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recentOrderClient: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  recentOrderSub: {
+    fontSize: 11,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  recentOrderValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#059669',
+  },
+
+  // Relatórios
+  rankingRow: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
     padding: 12,
     marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#F1F5F9',
+    flexDirection: 'row',
+    alignItems: 'center',
   },
-  listItemTitle: {
-    color: '#F1F5F9',
-    fontSize: 13,
-    fontWeight: 'bold',
+  rankingNumberBox: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#F1F5F9',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  listItemSub: {
-    color: '#64748B',
+  rankingNumberText: {
     fontSize: 11,
+    fontWeight: '800',
+    color: '#475569',
+  },
+  rankingDesc: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1E293B',
+  },
+  rankingSub: {
+    fontSize: 11,
+    color: '#94A3B8',
+  },
+  rankingPrice: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: '#2563EB',
+  },
+
+  // Financeiro
+  financialSummaryCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  financialSummaryLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: '#64748B',
+  },
+  financialSummaryValue: {
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#0284C7',
+    marginVertical: 4,
+  },
+  financialPillsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+  },
+  financialStatPill: {
+    flex: 1,
+    backgroundColor: '#F8FAFC',
+    borderRadius: 12,
+    padding: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  statPillLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  statPillValue: {
+    fontSize: 13,
+    fontWeight: '800',
     marginTop: 2,
   },
-  productPriceHighlight: {
-    color: '#10B981',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  configCard: {
-    backgroundColor: '#0F172A',
-    borderRadius: 14,
-    padding: 16,
+  titleCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#1E293B',
+    borderColor: '#F1F5F9',
   },
-  configCardTitle: {
-    color: '#F8FAFC',
-    fontSize: 15,
-    fontWeight: 'bold',
-  },
-  configCardDesc: {
-    color: '#94A3B8',
-    fontSize: 12,
-    lineHeight: 18,
-    marginTop: 6,
-    marginBottom: 12,
-  },
-  configItem: {
+  titleCardTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#1E293B',
-    padding: 10,
-    borderRadius: 8,
-    marginBottom: 12,
   },
-  configItemLabel: {
-    color: '#64748B',
-    fontSize: 12,
-  },
-  configItemValue: {
-    color: '#38BDF8',
+  titleNumber: {
     fontSize: 13,
-    fontWeight: 'bold',
-    fontFamily: 'monospace',
+    fontWeight: '800',
+    color: '#0F172A',
   },
-  urlBox: {
-    backgroundColor: '#1E293B',
-    color: '#94A3B8',
-    fontSize: 11,
-    padding: 10,
+  titleBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
     borderRadius: 8,
-    marginBottom: 12,
-    fontFamily: 'monospace',
   },
-  primaryBtn: {
-    backgroundColor: '#0284C7',
+  titleBadgeVencido: {
+    backgroundColor: '#FFF1F2',
+  },
+  titleBadgeAVencer: {
+    backgroundColor: '#F0F9FF',
+  },
+  titleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  titleClient: {
+    fontSize: 13,
+    color: '#334155',
+    fontWeight: '600',
+    marginTop: 4,
+  },
+  titleBottom: {
     flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 10,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#F8FAFC',
   },
-  primaryBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 'bold',
+  titleDate: {
+    fontSize: 11,
+    color: '#64748B',
   },
-  secondaryBtn: {
-    backgroundColor: '#1E293B',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#334155',
+  titleValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    color: '#0284C7',
   },
-  secondaryBtnText: {
-    color: '#38BDF8',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
+
+  // Modal
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(2, 6, 23, 0.85)',
-    justifyContent: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
     alignItems: 'center',
-    padding: 20,
+    justifyContent: 'center',
+    padding: 24,
   },
   modalBox: {
-    backgroundColor: '#0F172A',
-    borderRadius: 16,
-    padding: 20,
     width: '100%',
-    borderWidth: 1,
-    borderColor: '#1E293B',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 20,
   },
   modalTitle: {
-    color: '#F8FAFC',
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: '800',
+    color: '#0F172A',
   },
   modalDesc: {
-    color: '#94A3B8',
     fontSize: 12,
-    lineHeight: 18,
+    color: '#64748B',
     marginTop: 6,
-    marginBottom: 16,
+    lineHeight: 18,
   },
   modalInput: {
-    backgroundColor: '#1E293B',
-    color: '#FFFFFF',
-    borderRadius: 10,
-    padding: 12,
-    fontSize: 14,
+    height: 48,
+    backgroundColor: '#F8FAFC',
     borderWidth: 1,
-    borderColor: '#334155',
-    marginBottom: 16,
-    fontFamily: 'monospace',
+    borderColor: '#CBD5E1',
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    fontSize: 14,
+    color: '#0F172A',
+    marginVertical: 16,
   },
-  modalButtonsRow: {
+  modalActions: {
     flexDirection: 'row',
     gap: 10,
   },
   modalCancelBtn: {
     flex: 1,
-    backgroundColor: '#1E293B',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  modalCancelBtnText: {
-    color: '#94A3B8',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  modalConfirmBtn: {
-    flex: 1,
-    backgroundColor: '#0284C7',
-    paddingVertical: 12,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  modalConfirmBtnText: {
-    color: '#FFFFFF',
-    fontSize: 13,
-    fontWeight: 'bold',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#0F172A',
-    borderTopWidth: 1,
-    borderTopColor: '#1E293B',
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-  },
-  navItem: {
-    flex: 1,
+    height: 44,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  navItemText: {
+  modalCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: '#64748B',
-    fontSize: 10,
-    fontWeight: 'bold',
-    marginTop: 4,
   },
-  navItemTextActive: {
-    color: '#38BDF8',
+  modalConfirmBtn: {
+    flex: 1,
+    height: 44,
+    backgroundColor: '#2563EB',
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+
+  // Estados vazios
+  emptyContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 32,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#334155',
+    marginTop: 12,
+  },
+  emptySubtitle: {
+    fontSize: 12,
+    color: '#64748B',
+    textAlign: 'center',
+    marginTop: 4,
+    lineHeight: 18,
   },
 });
