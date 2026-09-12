@@ -1,6 +1,6 @@
 {
   "name": "jm-forca-de-vendas",
-  "version": "17.0.0",
+  "version": "18.0.0",
   "description": "JM Força de Vendas Mobile - Expo React Native puro para compilação EAS Build",
   "main": "index.js",
   "scripts": {
